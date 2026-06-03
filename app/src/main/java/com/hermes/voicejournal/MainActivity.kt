@@ -85,8 +85,8 @@ class MainActivity : AppCompatActivity() {
         stopButton.setOnClickListener {
             hapticStop(stopButton)
             RecordingService.stop(this)
-            statusText.text = "감지 종료 요청됨"
-            toast("음성 감지를 종료했습니다. 진행 중인 조각이 있으면 업로드 후 멈춥니다.")
+            statusText.text = "감지 종료를 요청했습니다."
+            toast("음성 감지를 종료했습니다. 진행 중인 세그먼트가 있으면 업로드한 뒤 멈춥니다.")
         }
 
         ensurePermissions()
@@ -168,7 +168,7 @@ class MainActivity : AppCompatActivity() {
                 Prefs.save(this, cfg)
                 Prefs.setSetupComplete(this, true)
                 refreshConfigSummary()
-                statusText.text = "설정 저장됨 · VAD 자동 녹음 / 07:00~20:00"
+                statusText.text = "설정 저장 완료 · VAD 자동 녹음 / 07:00~20:00"
                 toast("설정을 저장했습니다.")
                 dialog.dismiss()
 
@@ -186,7 +186,7 @@ class MainActivity : AppCompatActivity() {
         val entries = UploadHistoryStore.readAll(this).takeLast(20).asReversed()
         val pendingFiles = listLocalRecordingFiles().takeLast(20).asReversed()
         val message = buildString {
-            appendLine("로컬에 남아 있는 음성파일")
+            appendLine("대기 중인 로컬 파일")
             if (pendingFiles.isEmpty()) {
                 appendLine("- 없음")
             } else {
@@ -195,17 +195,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             appendLine()
-            appendLine("업로드 히스토리")
+            appendLine("업로드 기록")
             if (entries.isEmpty()) {
-                appendLine("- 아직 업로드된 파일이 없습니다.")
+                appendLine("- 없음")
             } else {
                 entries.forEachIndexed { index, entry ->
-                    appendLine("${index + 1}. [${entry.payloadType}] ${entry.fileName}")
-                    appendLine("   세션: ${entry.sessionId}")
-                    appendLine("   길이: ${entry.durationSeconds}초")
-                    appendLine("   시작: ${entry.startedAtIso}")
-                    appendLine("   업로드: ${entry.uploadedAtIso}")
-                    appendLine()
+                    appendLine("${index + 1}. ${entry.fileName} · ${entry.durationSeconds}초")
                 }
             }
         }
@@ -213,9 +208,9 @@ class MainActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.saved_files_title)
             .setMessage(message)
-            .setNeutralButton("로그 삭제") { _, _ ->
+            .setNeutralButton("기록 삭제") { _, _ ->
                 UploadHistoryStore.clear(this)
-                toast("업로드 히스토리를 삭제했습니다.")
+                toast("업로드 기록을 삭제했습니다.")
                 refreshConfigSummary()
             }
             .setPositiveButton("닫기", null)
@@ -273,41 +268,6 @@ class MainActivity : AppCompatActivity() {
             .setMessage(message)
             .setPositiveButton("닫기", null)
             .show()
-    }
-
-    private data class PendingUploadMeta(
-        val sessionId: String,
-        val chunkIndex: Int,
-        val durationSeconds: Long,
-        val startedAtIso: String,
-    )
-
-    private fun readPendingUploadMeta(file: java.io.File, fallbackSessionLabel: String): PendingUploadMeta {
-        val sidecar = java.io.File(file.parentFile, "${file.nameWithoutExtension}.json")
-        if (!sidecar.exists()) {
-            return PendingUploadMeta(
-                sessionId = file.parentFile?.name ?: fallbackSessionLabel,
-                chunkIndex = 0,
-                durationSeconds = 0,
-                startedAtIso = java.time.Instant.ofEpochMilli(file.lastModified()).toString(),
-            )
-        }
-        return runCatching {
-            val json = org.json.JSONObject(sidecar.readText())
-            PendingUploadMeta(
-                sessionId = json.optString("session_id").ifBlank { file.parentFile?.name ?: fallbackSessionLabel },
-                chunkIndex = json.optInt("chunk_index", 0),
-                durationSeconds = json.optLong("duration_seconds", 0L),
-                startedAtIso = json.optString("started_at").ifBlank { java.time.Instant.ofEpochMilli(file.lastModified()).toString() },
-            )
-        }.getOrElse {
-            PendingUploadMeta(
-                sessionId = file.parentFile?.name ?: fallbackSessionLabel,
-                chunkIndex = 0,
-                durationSeconds = 0,
-                startedAtIso = java.time.Instant.ofEpochMilli(file.lastModified()).toString(),
-            )
-        }
     }
 
     private fun listLocalRecordingFiles(): List<java.io.File> {
@@ -400,24 +360,6 @@ class MainActivity : AppCompatActivity() {
             @Suppress("DEPRECATION")
             vibrator?.vibrate(durationMs)
         }
-    }
-
-    private fun logUploadDestination(
-        fileName: String,
-        savedPath: String?,
-        transcriptPath: String?,
-        audioDeleted: Boolean,
-        audioDeleteError: String?,
-    ) {
-        val details = buildString {
-            appendLine("서버 저장 확인: $fileName")
-            appendLine("- saved_path: ${savedPath ?: "(없음)"}")
-            appendLine("- transcript_path: ${transcriptPath ?: "(없음)"}")
-            appendLine("- audio_deleted: $audioDeleted")
-            appendLine("- audio_delete_error: ${audioDeleteError ?: "(없음)"}")
-        }
-        statusText.text = "전송 완료 · 서버 저장 위치 확인"
-        configSummaryText.text = configSummaryText.text.toString() + "\n\n" + details
     }
 
     private fun toast(message: String) {

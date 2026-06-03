@@ -75,7 +75,8 @@ class RecordingService : Service() {
     }
 
     private fun withinWorkHours(nowMs: Long = System.currentTimeMillis()): Boolean {
-        return true
+        val hour = java.util.Calendar.getInstance().apply { timeInMillis = nowMs }.get(java.util.Calendar.HOUR_OF_DAY)
+        return hour in WORK_START_HOUR until WORK_END_HOUR
     }
 
     private fun workEndAt(nowMs: Long = System.currentTimeMillis()): Long {
@@ -103,7 +104,12 @@ class RecordingService : Service() {
             }
         } finally {
             stopMonitorRecorder()
-            stopForeground(true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
             stopSelf()
         }
     }
@@ -239,27 +245,25 @@ class RecordingService : Service() {
             file = file,
         )
 
-        uploadResult.onSuccess { saved ->
-            if (saved != null) {
-                val fileSizeBytes = file.length()
-                updateNotification("업로드 완료 · 서버 분석 대기")
-                runCatching {
-                    UploadHistoryStore.append(
-                        this,
-                        UploadedFileEntry(
-                            payloadType = "audio",
-                            fileName = file.name,
-                            chunkIndex = currentSegmentIndex,
-                            sessionId = currentSessionId,
-                            durationSeconds = durationSeconds,
-                            startedAtIso = isoNow(startedAtMs),
-                            uploadedAtIso = isoNow(System.currentTimeMillis()),
-                            fileSizeBytes = fileSizeBytes,
-                        )
+        uploadResult.onSuccess { _ ->
+            val fileSizeBytes = file.length()
+            updateNotification("업로드 완료 · 서버 분석 대기")
+            runCatching {
+                UploadHistoryStore.append(
+                    this,
+                    UploadedFileEntry(
+                        payloadType = "audio",
+                        fileName = file.name,
+                        chunkIndex = currentSegmentIndex,
+                        sessionId = currentSessionId,
+                        durationSeconds = durationSeconds,
+                        startedAtIso = isoNow(startedAtMs),
+                        uploadedAtIso = isoNow(System.currentTimeMillis()),
+                        fileSizeBytes = fileSizeBytes,
                     )
-                }
-                cleanupSegmentArtifacts(file)
+                )
             }
+            cleanupSegmentArtifacts(file)
         }.onFailure { e ->
             updateNotification("업로드 실패 · ${e.message?.take(60) ?: "전송 오류"}")
         }
