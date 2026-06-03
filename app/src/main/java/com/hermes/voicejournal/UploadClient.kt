@@ -1,6 +1,7 @@
 package com.hermes.voicejournal
 
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,6 +18,11 @@ data class UploadResult(
     val audioDeleted: Boolean,
     val audioDeleteError: String?,
 )
+
+class UploadFailureException(
+    val httpCode: Int,
+    val responsePreview: String,
+) : IOException("HTTP $httpCode ${responsePreview.trim()}")
 
 class UploadClient {
     private val client = OkHttpClient.Builder()
@@ -57,7 +63,7 @@ class UploadClient {
             client.newCall(request).execute().use { response ->
                 val responseText = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    error("upload failed: HTTP ${response.code} ${responseText.trim()}")
+                    throw UploadFailureException(response.code, responseText.ifBlank { response.message })
                 }
                 val json = org.json.JSONObject(responseText)
                 UploadResult(

@@ -274,7 +274,10 @@ class RecordingService : Service() {
             }
             cleanupSegmentArtifacts(file)
         }.onFailure { e ->
-            val message = e.message?.take(120)?.replace('\n', ' ') ?: "전송 오류"
+            val message = when (e) {
+                is UploadFailureException -> "HTTP ${e.httpCode} · ${e.responsePreview.take(120).replace('\n', ' ')}"
+                else -> e.message?.take(120)?.replace('\n', ' ') ?: "전송 오류"
+            }
             updateNotification("업로드 실패 · $message")
             runCatching {
                 UploadHistoryStore.append(

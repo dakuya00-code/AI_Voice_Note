@@ -10,9 +10,6 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.Menu
@@ -188,11 +185,36 @@ class MainActivity : AppCompatActivity() {
     private fun showSavedFilesDialog() {
         val entries = UploadHistoryStore.readAll(this).takeLast(20).asReversed()
         val pendingFiles = listLocalRecordingFiles().takeLast(20).asReversed()
-        val message = buildSavedFilesMessage(entries, pendingFiles)
+        val successEntries = entries.filter { it.uploadStatus.equals("success", ignoreCase = true) }
+        val failureEntries = entries.filter { it.uploadStatus.equals("failure", ignoreCase = true) }
+
+        val view = layoutInflater.inflate(R.layout.dialog_saved_files, null)
+        val summaryText: TextView = view.findViewById(R.id.dialogSummaryText)
+        val pendingText: TextView = view.findViewById(R.id.dialogPendingText)
+        val failureText: TextView = view.findViewById(R.id.dialogFailureText)
+        val successText: TextView = view.findViewById(R.id.dialogSuccessText)
+        val successContainer: android.view.View = view.findViewById(R.id.dialogSuccessContainer)
+        val toggleButton: MaterialButton = view.findViewById(R.id.dialogToggleSuccessButton)
+
+        summaryText.text = buildSavedFilesSummary(entries.size, pendingFiles.size, successEntries.size, failureEntries.size)
+        pendingText.text = buildPendingText(pendingFiles)
+        failureText.text = buildFailureText(failureEntries)
+        successText.text = buildSuccessText(successEntries)
+
+        var successVisible = false
+        fun applyToggleState() {
+            successContainer.visibility = if (successVisible) android.view.View.VISIBLE else android.view.View.GONE
+            toggleButton.text = if (successVisible) "성공 항목 접기" else "성공 항목 보기"
+        }
+        applyToggleState()
+        toggleButton.setOnClickListener {
+            successVisible = !successVisible
+            applyToggleState()
+        }
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.saved_files_title)
-            .setMessage(message)
+            .setView(view)
             .setNeutralButton("기록 삭제") { _, _ ->
                 UploadHistoryStore.clear(this)
                 toast("업로드 기록을 삭제했습니다.")
@@ -202,80 +224,90 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun buildSavedFilesMessage(
-        entries: List<UploadedFileEntry>,
-        pendingFiles: List<File>,
+    private fun buildSavedFilesSummary(
+        totalEntries: Int,
+        pendingCount: Int,
+        successCount: Int,
+        failureCount: Int,
     ): CharSequence {
-        fun color(text: String, hex: String) = SpannableStringBuilder(text).apply {
-            setSpan(
-                ForegroundColorSpan(android.graphics.Color.parseColor(hex)),
-                0,
-                length,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-            )
+        return buildString {
+            append("대기 ")
+            append(pendingCount)
+            append(" · 성공 ")
+            append(successCount)
+            append(" · 실패 ")
+            append(failureCount)
+            append(" · 전체 ")
+            append(totalEntries)
         }
-
-        fun appendTitleLine(builder: SpannableStringBuilder, title: String, badge: String) {
-            builder.append(title)
-            builder.append(" ")
-            builder.append(color(badge, "#1E88E5"))
-            builder.append("\n")
-        }
-
-        val successCount = entries.count { it.uploadStatus.equals("success", ignoreCase = true) }
-        val failureCount = entries.count { it.uploadStatus.equals("failure", ignoreCase = true) }
-        val localCount = pendingFiles.size
-
-        val builder = SpannableStringBuilder()
-        appendTitleLine(builder, "대기 파일", localCount.toString())
-        if (pendingFiles.isEmpty()) {
-            builder.append("- 없음\n")
-        } else {
-            pendingFiles.take(5).forEachIndexed { index, file ->
-                builder.append("${index + 1}. ")
-                builder.append(file.name)
-                builder.append("\n")
-            }
-            if (pendingFiles.size > 5) {
-                builder.append("... 외 ${pendingFiles.size - 5}개\n")
-            }
-        }
-
-        builder.append("\n")
-        appendTitleLine(
-            builder,
-            "업로드 기록",
-            "성공 $successCount / 실패 $failureCount",
-        )
-        if (entries.isEmpty()) {
-            builder.append("- 없음\n")
-        } else {
-            entries.take(8).forEach { entry ->
-                val status = when (entry.uploadStatus.lowercase()) {
-                    "success" -> color("성공", "#2E7D32")
-                    "failure" -> color("실패", "#D32F2F")
-                    else -> color(entry.uploadStatus, "#616161")
-                }
-                builder.append("• ")
-                builder.append(status)
-                builder.append("  ")
-                builder.append(entry.fileName)
-                builder.append(" · ")
-                builder.append("${entry.durationSeconds}초")
-                builder.append("\n")
-                if (entry.statusMessage.isNotBlank()) {
-                    builder.append("  ↳ ")
-                    builder.append(entry.statusMessage.take(80))
-                    builder.append("\n")
-                }
-            }
-            if (entries.size > 8) {
-                builder.append("... 외 ${entries.size - 8}개\n")
-            }
-        }
-
-        return builder
     }
+
+    private fun buildPendingText(pendingFiles: List<File>): CharSequence {
+        return if (pendingFiles.isEmpty()) {
+            "- 없음"
+        } else {
+            buildString {
+                pendingFiles.take(5).forEachIndexed { index, file ->
+                    append("${index + 1}. ")
+                    append(file.name)
+                    append('\n')
+                }
+                if (pendingFiles.size > 5) {
+                    append("... 외 ")
+                    append(pendingFiles.size - 5)
+                    append("개")
+                }
+            }.trimEnd()
+        }
+    }
+
+    private fun buildFailureText(entries: List<UploadedFileEntry>): CharSequence {
+        return if (entries.isEmpty()) {
+            "실패 항목 없음"
+        } else {
+            buildString {
+                entries.take(5).forEach { entry ->
+                    append("🔴 ")
+                    append(entry.statusMessage.ifBlank { "실패" }.take(90))
+                    append('\n')
+                    append("   ")
+                    append(entry.fileName)
+                    append(" · ")
+                    append(entry.durationSeconds)
+                    append("초")
+                    append('\n')
+                }
+                if (entries.size > 5) {
+                    append("... 외 ")
+                    append(entries.size - 5)
+                    append("개")
+                }
+            }.trimEnd()
+        }
+    }
+
+    private fun buildSuccessText(entries: List<UploadedFileEntry>): CharSequence {
+        return if (entries.isEmpty()) {
+            "성공 항목 없음"
+        } else {
+            buildString {
+                entries.take(5).forEach { entry ->
+                    append("🟢 ")
+                    append(entry.fileName)
+                    append(" · ")
+                    append(entry.durationSeconds)
+                    append("초")
+                    append('\n')
+                }
+                if (entries.size > 5) {
+                    append("... 외 ")
+                    append(entries.size - 5)
+                    append("개")
+                }
+            }.trimEnd()
+        }
+    }
+
 
     private fun showUpdateDialog() {
         val currentVersion = runCatching {
