@@ -15,10 +15,21 @@ object Prefs {
     private const val KEY_SESSION_LABEL = "session_label"
     private const val KEY_SETUP_COMPLETE = "setup_complete"
 
+    private const val DEFAULT_SERVER_URL = "http://187.77.115.121:32770"
+    private const val LEGACY_SERVER_URL = "https://3394dc7db4303708-187-77-115-121.serveousercontent.com"
+
     fun load(context: Context): RecordingConfig {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val storedServerUrl = prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL
+        val normalizedServerUrl = when (storedServerUrl.trim()) {
+            LEGACY_SERVER_URL -> DEFAULT_SERVER_URL
+            else -> storedServerUrl.trim().ifBlank { DEFAULT_SERVER_URL }
+        }
+        if (normalizedServerUrl != storedServerUrl) {
+            prefs.edit().putString(KEY_SERVER_URL, normalizedServerUrl).apply()
+        }
         return RecordingConfig(
-            serverUrl = prefs.getString(KEY_SERVER_URL, "https://3394dc7db4303708-187-77-115-121.serveousercontent.com") ?: "https://3394dc7db4303708-187-77-115-121.serveousercontent.com",
+            serverUrl = normalizedServerUrl,
             uploadPath = prefs.getString(KEY_UPLOAD_PATH, "/webhook/voice-note/upload") ?: "/webhook/voice-note/upload",
             sessionLabel = prefs.getString(KEY_SESSION_LABEL, "workday") ?: "workday",
         )

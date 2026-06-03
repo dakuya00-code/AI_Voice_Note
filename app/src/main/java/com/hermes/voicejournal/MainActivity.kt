@@ -136,7 +136,7 @@ class MainActivity : AppCompatActivity() {
         val sessionLabelInput = view.findViewById<TextInputEditText>(R.id.sessionLabelInput)
 
         val current = Prefs.load(this)
-        serverUrlInput.setText(current.serverUrl.ifBlank { "https://3394dc7db4303708-187-77-115-121.serveousercontent.com" })
+        serverUrlInput.setText(current.serverUrl.ifBlank { "http://187.77.115.121:32770" })
         uploadPathInput.setText(current.uploadPath.ifBlank { "/webhook/voice-note/upload" })
         sessionLabelInput.setText(current.sessionLabel.ifBlank { "workday" })
 
