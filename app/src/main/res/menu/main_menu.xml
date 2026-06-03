@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/menu_settings"
+        android:title="설정"
+        android:icon="@android:drawable/ic_menu_manage"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_saved_files"
+        android:title="파일 히스토리"
+        android:icon="@android:drawable/ic_menu_save"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_check_update"
+        android:title="업데이트 확인"
+        android:icon="@android:drawable/ic_popup_sync"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_install_guide"
+        android:title="설치 안내"
+        android:icon="@android:drawable/ic_menu_info_details"
+        app:showAsAction="never" />
+</menu>

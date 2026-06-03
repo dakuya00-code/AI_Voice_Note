@@ -1,0 +1,78 @@
+package com.hermes.voicejournal
+
+import java.io.File
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
+
+data class UploadResult(
+    val savedPath: String?,
+    val transcriptPath: String?,
+    val audioDeleted: Boolean,
+    val audioDeleteError: String?,
+)
+
+class UploadClient {
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(180, TimeUnit.SECONDS)
+        .writeTimeout(180, TimeUnit.SECONDS)
+        .build()
+
+    suspend fun uploadChunk(
+        serverUrl: String,
+        uploadPath: String,
+        sessionId: String,
+        chunkIndex: Int,
+        durationSeconds: Long,
+        startedAtIso: String,
+        file: File,
+    ): Result<UploadResult> = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = buildUploadUrl(serverUrl, uploadPath)
+            val body = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("session_id", sessionId)
+                .addFormDataPart("chunk_index", chunkIndex.toString())
+                .addFormDataPart("duration_seconds", durationSeconds.toString())
+                .addFormDataPart("started_at", startedAtIso)
+                .addFormDataPart(
+                    "file",
+                    file.name,
+                    file.asRequestBody("audio/wav".toMediaType())
+                )
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val responseText = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    error("upload failed: HTTP ${response.code} ${responseText.trim()}")
+                }
+                val json = org.json.JSONObject(responseText)
+                UploadResult(
+                    savedPath = json.optString("saved_path").ifBlank { null },
+                    transcriptPath = json.optString("transcript_path").ifBlank { null },
+                    audioDeleted = json.optBoolean("audio_deleted", false),
+                    audioDeleteError = json.optString("audio_delete_error").ifBlank { null },
+                )
+            }
+        }
+    }
+
+    private fun buildUploadUrl(serverUrl: String, uploadPath: String): String {
+        val base = serverUrl.trim().trimEnd('/')
+        val path = uploadPath.trim().trimStart('/')
+        return "$base/$path".toHttpUrl().toString()
+    }
+}

@@ -1,0 +1,28 @@
+# Android / Gradle
+build/
+.gradle/
+local.properties
+*.keystore
+*.jks
+
+# IDE
+.idea/
+*.iml
+
+# Python / env
+.venv/
+__pycache__/
+*.pyc
+.env
+*.log
+
+# Voice journal runtime data
+data/inbox/*
+!data/inbox/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# local upload-server runtime data
+server/server_data/
