@@ -10,6 +10,9 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.Menu
@@ -185,33 +188,7 @@ class MainActivity : AppCompatActivity() {
     private fun showSavedFilesDialog() {
         val entries = UploadHistoryStore.readAll(this).takeLast(20).asReversed()
         val pendingFiles = listLocalRecordingFiles().takeLast(20).asReversed()
-        val message = buildString {
-            appendLine("대기 중인 로컬 파일")
-            if (pendingFiles.isEmpty()) {
-                appendLine("- 없음")
-            } else {
-                pendingFiles.forEachIndexed { index, file ->
-                    appendLine("${index + 1}. ${file.name}")
-                }
-            }
-            appendLine()
-            appendLine("업로드 기록")
-            if (entries.isEmpty()) {
-                appendLine("- 없음")
-            } else {
-                entries.forEachIndexed { index, entry ->
-                    val statusLabel = when (entry.uploadStatus.lowercase()) {
-                        "success" -> "성공"
-                        "failure" -> "실패"
-                        else -> entry.uploadStatus
-                    }
-                    appendLine("${index + 1}. [$statusLabel] ${entry.fileName} · ${entry.durationSeconds}초")
-                    if (entry.statusMessage.isNotBlank()) {
-                        appendLine("   ${entry.statusMessage}")
-                    }
-                }
-            }
-        }
+        val message = buildSavedFilesMessage(entries, pendingFiles)
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.saved_files_title)
@@ -223,6 +200,81 @@ class MainActivity : AppCompatActivity() {
             }
             .setPositiveButton("닫기", null)
             .show()
+    }
+
+    private fun buildSavedFilesMessage(
+        entries: List<UploadedFileEntry>,
+        pendingFiles: List<File>,
+    ): CharSequence {
+        fun color(text: String, hex: String) = SpannableStringBuilder(text).apply {
+            setSpan(
+                ForegroundColorSpan(android.graphics.Color.parseColor(hex)),
+                0,
+                length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+
+        fun appendTitleLine(builder: SpannableStringBuilder, title: String, badge: String) {
+            builder.append(title)
+            builder.append(" ")
+            builder.append(color(badge, "#1E88E5"))
+            builder.append("\n")
+        }
+
+        val successCount = entries.count { it.uploadStatus.equals("success", ignoreCase = true) }
+        val failureCount = entries.count { it.uploadStatus.equals("failure", ignoreCase = true) }
+        val localCount = pendingFiles.size
+
+        val builder = SpannableStringBuilder()
+        appendTitleLine(builder, "대기 파일", localCount.toString())
+        if (pendingFiles.isEmpty()) {
+            builder.append("- 없음\n")
+        } else {
+            pendingFiles.take(5).forEachIndexed { index, file ->
+                builder.append("${index + 1}. ")
+                builder.append(file.name)
+                builder.append("\n")
+            }
+            if (pendingFiles.size > 5) {
+                builder.append("... 외 ${pendingFiles.size - 5}개\n")
+            }
+        }
+
+        builder.append("\n")
+        appendTitleLine(
+            builder,
+            "업로드 기록",
+            "성공 $successCount / 실패 $failureCount",
+        )
+        if (entries.isEmpty()) {
+            builder.append("- 없음\n")
+        } else {
+            entries.take(8).forEach { entry ->
+                val status = when (entry.uploadStatus.lowercase()) {
+                    "success" -> color("성공", "#2E7D32")
+                    "failure" -> color("실패", "#D32F2F")
+                    else -> color(entry.uploadStatus, "#616161")
+                }
+                builder.append("• ")
+                builder.append(status)
+                builder.append("  ")
+                builder.append(entry.fileName)
+                builder.append(" · ")
+                builder.append("${entry.durationSeconds}초")
+                builder.append("\n")
+                if (entry.statusMessage.isNotBlank()) {
+                    builder.append("  ↳ ")
+                    builder.append(entry.statusMessage.take(80))
+                    builder.append("\n")
+                }
+            }
+            if (entries.size > 8) {
+                builder.append("... 외 ${entries.size - 8}개\n")
+            }
+        }
+
+        return builder
     }
 
     private fun showUpdateDialog() {
