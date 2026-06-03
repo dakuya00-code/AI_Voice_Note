@@ -245,9 +245,16 @@ class RecordingService : Service() {
             file = file,
         )
 
-        uploadResult.onSuccess { _ ->
+        uploadResult.onSuccess { result ->
             val fileSizeBytes = file.length()
-            updateNotification("업로드 완료 · 서버 분석 대기")
+            val successMsg = buildString {
+                append("성공")
+                if (!result.savedPath.isNullOrBlank()) append(" · saved_path=${result.savedPath}")
+                if (!result.transcriptPath.isNullOrBlank()) append(" · transcript_path=${result.transcriptPath}")
+                if (result.audioDeleted) append(" · audio_deleted=true")
+                if (!result.audioDeleteError.isNullOrBlank()) append(" · audio_delete_error=${result.audioDeleteError}")
+            }
+            updateNotification("업로드 성공 · 서버 분석 대기")
             runCatching {
                 UploadHistoryStore.append(
                     this,
@@ -260,12 +267,32 @@ class RecordingService : Service() {
                         startedAtIso = isoNow(startedAtMs),
                         uploadedAtIso = isoNow(System.currentTimeMillis()),
                         fileSizeBytes = fileSizeBytes,
+                        uploadStatus = "success",
+                        statusMessage = successMsg,
                     )
                 )
             }
             cleanupSegmentArtifacts(file)
         }.onFailure { e ->
-            updateNotification("업로드 실패 · ${e.message?.take(60) ?: "전송 오류"}")
+            val message = e.message?.take(120)?.replace('\n', ' ') ?: "전송 오류"
+            updateNotification("업로드 실패 · $message")
+            runCatching {
+                UploadHistoryStore.append(
+                    this,
+                    UploadedFileEntry(
+                        payloadType = "audio",
+                        fileName = file.name,
+                        chunkIndex = currentSegmentIndex,
+                        sessionId = currentSessionId,
+                        durationSeconds = durationSeconds,
+                        startedAtIso = isoNow(startedAtMs),
+                        uploadedAtIso = isoNow(System.currentTimeMillis()),
+                        fileSizeBytes = file.length(),
+                        uploadStatus = "failure",
+                        statusMessage = message,
+                    )
+                )
+            }
         }
 
         currentSegmentIndex += 1

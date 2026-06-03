@@ -200,7 +200,15 @@ class MainActivity : AppCompatActivity() {
                 appendLine("- 없음")
             } else {
                 entries.forEachIndexed { index, entry ->
-                    appendLine("${index + 1}. ${entry.fileName} · ${entry.durationSeconds}초")
+                    val statusLabel = when (entry.uploadStatus.lowercase()) {
+                        "success" -> "성공"
+                        "failure" -> "실패"
+                        else -> entry.uploadStatus
+                    }
+                    appendLine("${index + 1}. [$statusLabel] ${entry.fileName} · ${entry.durationSeconds}초")
+                    if (entry.statusMessage.isNotBlank()) {
+                        appendLine("   ${entry.statusMessage}")
+                    }
                 }
             }
         }
