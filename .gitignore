@@ -26,3 +26,8 @@ logs/*
 
 # local upload-server runtime data
 server/server_data/
+
+# workspace debug exports (keep docs only)
+debug_exports/*
+!debug_exports/README.md
+!debug_exports/.gitignore

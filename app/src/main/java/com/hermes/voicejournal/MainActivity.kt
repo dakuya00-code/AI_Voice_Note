@@ -114,6 +114,10 @@ class MainActivity : AppCompatActivity() {
                 showSavedFilesDialog()
                 true
             }
+            R.id.menu_export_debug -> {
+                exportDebugArtifacts()
+                true
+            }
             R.id.menu_check_update -> {
                 showUpdateDialog()
                 true
@@ -369,6 +373,62 @@ class MainActivity : AppCompatActivity() {
             .filter { it.isFile && (it.extension.equals("m4a", ignoreCase = true) || it.extension.equals("wav", ignoreCase = true)) }
             .sortedByDescending { it.lastModified() }
             .toList()
+    }
+
+    private fun exportDebugArtifacts() {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val baseDir = getExternalFilesDir(null) ?: filesDir
+                    val exportRoot = java.io.File(baseDir, "debug_exports").apply { mkdirs() }
+                    val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+                    val target = java.io.File(exportRoot, "debug_$timestamp").apply { mkdirs() }
+
+                    // 1) pending local voice files + sidecar json
+                    val sourceRoot = java.io.File(cacheDir, "voice-journal")
+                    if (sourceRoot.exists()) {
+                        sourceRoot.walkTopDown()
+                            .filter { it.isFile && (it.extension.equals("wav", ignoreCase = true) || it.extension.equals("m4a", ignoreCase = true) || it.extension.equals("json", ignoreCase = true)) }
+                            .forEach { src ->
+                                val rel = src.relativeTo(sourceRoot)
+                                val out = java.io.File(target, "voice-journal/$rel")
+                                out.parentFile?.mkdirs()
+                                src.copyTo(out, overwrite = true)
+                            }
+                    }
+
+                    // 2) upload history
+                    java.io.File(filesDir, "uploaded_files.json").takeIf { it.exists() }?.copyTo(
+                        java.io.File(target, "uploaded_files.json"),
+                        overwrite = true,
+                    )
+
+                    // 3) debug log if any
+                    java.io.File(filesDir, "Documents/voice_note_debug.log").takeIf { it.exists() }?.copyTo(
+                        java.io.File(target, "voice_note_debug.log"),
+                        overwrite = true,
+                    )
+
+                    val index = java.io.File(target, "INDEX.md")
+                    index.writeText(buildString {
+                        appendLine("# App debug export")
+                        appendLine()
+                        appendLine("- Generated: $timestamp")
+                        appendLine("- Source: app internal storage")
+                        appendLine("- Contents: pending voice files, sidecar meta, upload history, debug log")
+                    })
+                    target.absolutePath
+                }.getOrElse { "ERROR: ${it.message ?: "export failed"}" }
+            }
+
+            when {
+                result.startsWith("ERROR:") -> toast(result)
+                else -> {
+                    toast("디버그 파일을 내보냈습니다.")
+                    statusText.text = "디버그 export 완료 · $result"
+                }
+            }
+        }
     }
 
     private fun beginVoiceMonitoring() {

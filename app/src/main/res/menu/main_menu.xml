@@ -15,6 +15,12 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/menu_export_debug"
+        android:title="디버그 내보내기"
+        android:icon="@android:drawable/ic_menu_share"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_check_update"
         android:title="업데이트 확인"
         android:icon="@android:drawable/ic_popup_sync"
